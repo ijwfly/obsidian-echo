@@ -1,4 +1,4 @@
-import { requestUrl, RequestUrlParam, Vault } from 'obsidian';
+import { requestUrl, RequestUrlParam, Vault, Notice } from 'obsidian';
 import { json } from 'stream/consumers';
 
 interface NoteResponse {
@@ -119,18 +119,29 @@ export class EchoApiService {
     public async syncNewNotes(clientId: string): Promise<void> {
         try {
             await this.createFolderIfNotExists(this.saveFolder);
+            // console.log("Fetching new notes");
             const notes = await this.fetchNewNotes();
             for (const note of notes) {
                 // Try to claim the note
+                // console.log(`Claiming note ${note.id}`);
                 await this.claimNote(note.id, clientId);
                 // Download the note
+                // console.log(`Downloading note ${note.id}`);
                 const downloadedNote = await this.downloadNote(note.id);
                 // Save the note locally
                 const filteredTitle = note.title.replace(/[^a-zA-Zа-яА-Я0-9\s]/g, '');
-                let fileName = `${this.saveFolder}/${filteredTitle}.md`;
+				// TODO: think about naming for case when name already exists
+                const createdDate = new Date(note.created_at);
+                const datePrefix = createdDate.toISOString().split('T')[0];
+                let fileName = `${this.saveFolder}/${datePrefix} ${filteredTitle}.md`;
+                // console.log(`Saving note ${note.id} as ${fileName}`);
                 await this.vault.create(fileName, downloadedNote.content);
                 // Confirm the delivery
+                // console.log(`Confirming note ${note.id}`);
                 await this.confirmNote(note.id);
+            }
+            if (notes.length > 0) {
+                new Notice(`Obsidian Echo: ${notes.length} notes synced`);
             }
         } catch (error) {
             console.error("Obsidian Echo sync error:", error);
